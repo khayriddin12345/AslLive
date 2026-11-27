@@ -25,12 +25,10 @@ export default function ExplorePage() {
     let active = true;
     setLoading(true);
     void (async () => {
-      const [{ data: { user } }, { data: reminderData }] = await Promise.all([
-        sb.auth.getUser(),
-        sb.auth.getUser().then(({ data: { user } }) => user
-          ? sb.from('reminders').select('id,target_type,remind_at').eq('user_id', user.id).order('remind_at')
-          : Promise.resolve({ data: [] as Reminder[] })),
-      ]);
+      const { data: { user } } = await sb.auth.getUser();
+      const { data: reminderData } = user
+        ? await sb.from('reminders').select('id,target_type,remind_at').eq('user_id', user.id).order('remind_at')
+        : { data: [] as Reminder[] };
       if (!active) return;
       setViewerId(user?.id ?? null);
       setReminders((reminderData || []) as Reminder[]);
