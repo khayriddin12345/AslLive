@@ -46,6 +46,16 @@ create table if not exists public.reminders (
  phone_or_contact text, target_type text not null check(target_type in ('post','live','product')), target_id uuid not null,
  remind_at timestamptz not null, created_at timestamptz not null default now()
 );
+
+-- Follows: a user can follow another profile once; self-follow is invalid.
+create table if not exists public.follows (
+ follower_id uuid not null references public.profiles(id) on delete cascade,
+ following_id uuid not null references public.profiles(id) on delete cascade,
+ created_at timestamptz not null default now(),
+ primary key (follower_id, following_id),
+ constraint follows_no_self_follow check (follower_id <> following_id)
+);
+
 create index if not exists products_seller_created_idx on public.products(seller_id,created_at desc);
 create index if not exists posts_feed_idx on public.posts(created_at desc);
 create index if not exists posts_schedule_idx on public.posts(scheduled_for) where scheduled_for is not null;
@@ -54,6 +64,8 @@ create index if not exists live_messages_stream_idx on public.live_messages(stre
 create index if not exists orders_seller_idx on public.orders(seller_id,created_at desc);
 create index if not exists orders_buyer_idx on public.orders(buyer_id,created_at desc);
 create index if not exists reminders_user_idx on public.reminders(user_id,remind_at);
+create index if not exists follows_following_idx on public.follows(following_id,created_at desc);
+create index if not exists follows_follower_idx on public.follows(follower_id,created_at desc);
 
 alter table public.profiles enable row level security;
 alter table public.products enable row level security;
@@ -62,6 +74,7 @@ alter table public.live_streams enable row level security;
 alter table public.live_messages enable row level security;
 alter table public.orders enable row level security;
 alter table public.reminders enable row level security;
+alter table public.follows enable row level security;
 
 drop policy if exists "profiles public read" on public.profiles;
 create policy "profiles public read" on public.profiles for select using(true);
@@ -109,6 +122,15 @@ drop policy if exists "reminder own update" on public.reminders;
 create policy "reminder own update" on public.reminders for update using(auth.uid()=user_id) with check(auth.uid()=user_id);
 drop policy if exists "reminder own delete" on public.reminders;
 create policy "reminder own delete" on public.reminders for delete using(auth.uid()=user_id);
+
+drop policy if exists "follows public read" on public.follows;
+create policy "follows public read" on public.follows for select using (true);
+drop policy if exists "users follow as themselves" on public.follows;
+create policy "users follow as themselves" on public.follows for insert to authenticated
+ with check (auth.uid() = follower_id and follower_id <> following_id);
+drop policy if exists "users unfollow as themselves" on public.follows;
+create policy "users unfollow as themselves" on public.follows for delete to authenticated
+ using (auth.uid() = follower_id);
 
 insert into storage.buckets(id,name,public) values('media','media',true) on conflict(id) do update set public=true;
 drop policy if exists "media public read" on storage.objects;
