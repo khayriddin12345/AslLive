@@ -47,14 +47,21 @@ create table if not exists public.reminders (
  remind_at timestamptz not null, created_at timestamptz not null default now()
 );
 
--- Follows: a user can follow another profile once; self-follow is invalid.
+-- Follows. Supports both fresh installs and upgrade from the earlier composite-PK table.
 create table if not exists public.follows (
+ id uuid primary key default gen_random_uuid(),
  follower_id uuid not null references public.profiles(id) on delete cascade,
  following_id uuid not null references public.profiles(id) on delete cascade,
  created_at timestamptz not null default now(),
- primary key (follower_id, following_id),
+ constraint follows_unique_pair unique (follower_id, following_id),
  constraint follows_no_self_follow check (follower_id <> following_id)
 );
+alter table public.follows add column if not exists id uuid default gen_random_uuid();
+update public.follows set id = gen_random_uuid() where id is null;
+create unique index if not exists follows_id_uidx on public.follows(id);
+create unique index if not exists follows_pair_uidx on public.follows(follower_id, following_id);
+create index if not exists follows_following_idx on public.follows(following_id,created_at desc);
+create index if not exists follows_follower_idx on public.follows(follower_id,created_at desc);
 
 create index if not exists products_seller_created_idx on public.products(seller_id,created_at desc);
 create index if not exists posts_feed_idx on public.posts(created_at desc);
@@ -64,8 +71,6 @@ create index if not exists live_messages_stream_idx on public.live_messages(stre
 create index if not exists orders_seller_idx on public.orders(seller_id,created_at desc);
 create index if not exists orders_buyer_idx on public.orders(buyer_id,created_at desc);
 create index if not exists reminders_user_idx on public.reminders(user_id,remind_at);
-create index if not exists follows_following_idx on public.follows(following_id,created_at desc);
-create index if not exists follows_follower_idx on public.follows(follower_id,created_at desc);
 
 alter table public.profiles enable row level security;
 alter table public.products enable row level security;
